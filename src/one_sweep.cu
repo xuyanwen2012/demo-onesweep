@@ -36,6 +36,7 @@ using namespace cooperative_groups;
 #define G_HIST_WARPS 8      // Warps per threadblock in k_GlobalHistogram
 #define G_HIST_THREADS 256  // Threads per threadblock in k_GlobalHistogram
 #define G_TBLOCK_LOG 11     // log2(gridDim.x)
+
 #define G_HIST_PART_SIZE \
   (size >> G_TBLOCK_LOG)  // Partition tile size in k_GlobalHistogram
 
@@ -55,6 +56,7 @@ using namespace cooperative_groups;
 #define BIN_THREADS 512         // Threads per threadblock in k_DigitBinning
 #define BIN_WARPS 16            // Warps per threadblock in k_DigitBinning
 #define BIN_KEYS_PER_THREAD 15  // Keys per thread in k_DigitBinning
+
 #define BIN_SUB_PART_START \
   (WARP_INDEX * BIN_SUB_PART_SIZE)  // Starting offset of a subpartition tile
 #define BIN_PART_START \
@@ -210,6 +212,7 @@ __global__ void k_DigitBinning(unsigned int* globalHistogram,
                                unsigned int radixShift) {
   __shared__ unsigned int s_warpHistograms[BIN_PART_SIZE];
   __shared__ unsigned int s_localHistogram[RADIX];
+
   unsigned int* s_warpHist = &s_warpHistograms[WARP_INDEX << RADIX_LOG];
 
   // atomically assign partition tiles
