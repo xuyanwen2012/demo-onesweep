@@ -267,13 +267,13 @@ __global__ void k_DigitBinning(unsigned int* globalHistogram,
     }
 
     if (partitionIndex == 0)
-      atomicAdd(
-          (unsigned int*)&passHistogram[THREAD_ID * gridDim.x + partitionIndex],
-          FLAG_INCLUSIVE | s_warpHistograms[THREAD_ID] << 2);
+      atomicAdd(const_cast<unsigned int*>(
+                    &passHistogram[THREAD_ID * gridDim.x + partitionIndex]),
+                FLAG_INCLUSIVE | s_warpHistograms[THREAD_ID] << 2);
     else
-      atomicAdd(
-          (unsigned int*)&passHistogram[THREAD_ID * gridDim.x + partitionIndex],
-          FLAG_REDUCTION | s_warpHistograms[THREAD_ID] << 2);
+      atomicAdd(const_cast<unsigned int*>(
+                    &passHistogram[THREAD_ID * gridDim.x + partitionIndex]),
+                FLAG_REDUCTION | s_warpHistograms[THREAD_ID] << 2);
   }
   __syncthreads();
 
