@@ -1,7 +1,8 @@
 
 #include <cooperative_groups.h>
 #include <cooperative_groups/details/partitioning.h>
-#include <stdio.h>
+
+#include <cstdio>
 
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
@@ -73,17 +74,17 @@ using namespace cooperative_groups;
 #define FLAG_MASK 3  // Mask used to retrieve flag values
 
 __device__ __forceinline__ void InclusiveWarpScan(volatile unsigned int* t,
-                                                  int index,
-                                                  int strideLog) {
-  if (LANE > 0) t[index] += t[index - (1 << strideLog)];
-  if (LANE > 1) t[index] += t[index - (2 << strideLog)];
-  if (LANE > 3) t[index] += t[index - (4 << strideLog)];
-  if (LANE > 7) t[index] += t[index - (8 << strideLog)];
-  if (LANE > 15) t[index] += t[index - (16 << strideLog)];
+                                                  const int index,
+                                                  const int stride_log) {
+  if (LANE > 0) t[index] += t[index - (1 << stride_log)];
+  if (LANE > 1) t[index] += t[index - (2 << stride_log)];
+  if (LANE > 3) t[index] += t[index - (4 << stride_log)];
+  if (LANE > 7) t[index] += t[index - (8 << stride_log)];
+  if (LANE > 15) t[index] += t[index - (16 << stride_log)];
 }
 
 __device__ __forceinline__ void InclusiveWarpScanCircularShift(
-    volatile unsigned int* t, int index) {
+    volatile unsigned int* t, const int index) {
   if (LANE > 0) t[index] += t[index - 1];
   if (LANE > 1) t[index] += t[index - 2];
   if (LANE > 3) t[index] += t[index - 4];
@@ -95,20 +96,20 @@ __device__ __forceinline__ void InclusiveWarpScanCircularShift(
 }
 
 __device__ __forceinline__ void ExclusiveWarpScan(volatile unsigned int* t,
-                                                  int index,
-                                                  int strideLog) {
-  if (LANE > 0) t[index] += t[index - (1 << strideLog)];
-  if (LANE > 1) t[index] += t[index - (2 << strideLog)];
-  if (LANE > 3) t[index] += t[index - (4 << strideLog)];
-  if (LANE > 7) t[index] += t[index - (8 << strideLog)];
-  if (LANE > 15) t[index] += t[index - (16 << strideLog)];
+                                                  const int index,
+                                                  const int stride_log) {
+  if (LANE > 0) t[index] += t[index - (1 << stride_log)];
+  if (LANE > 1) t[index] += t[index - (2 << stride_log)];
+  if (LANE > 3) t[index] += t[index - (4 << stride_log)];
+  if (LANE > 7) t[index] += t[index - (8 << stride_log)];
+  if (LANE > 15) t[index] += t[index - (16 << stride_log)];
 
-  t[index] = LANE ? t[index - (1 << strideLog)] : 0;
+  t[index] = LANE ? t[index - (1 << stride_log)] : 0;
 }
 
-__global__ void k_GlobalHistogram(unsigned int* sort,
-                                  unsigned int* globalHistogram,
-                                  int size) {
+__global__ void k_GlobalHistogram(const unsigned int* sort,
+                                  unsigned int* global_histogram,
+                                  const int size) {
   __shared__ unsigned int s_globalHistFirst[RADIX];
   __shared__ unsigned int s_globalHistSec[RADIX];
   __shared__ unsigned int s_globalHistThird[RADIX];
@@ -158,25 +159,25 @@ __global__ void k_GlobalHistogram(unsigned int* sort,
   {
     int i = THREAD_ID;
     atomicAdd(
-        &globalHistogram[i],
+        &global_histogram[i],
         (LANE ? s_globalHistFirst[i] : 0) +
             (WARP_INDEX
                  ? __shfl_sync(0xffffffff, s_globalHistFirst[i - LANE_COUNT], 0)
                  : 0));
     atomicAdd(
-        &globalHistogram[i + SEC_RADIX_START],
+        &global_histogram[i + SEC_RADIX_START],
         (LANE ? s_globalHistSec[i] : 0) +
             (WARP_INDEX
                  ? __shfl_sync(0xffffffff, s_globalHistSec[i - LANE_COUNT], 0)
                  : 0));
     atomicAdd(
-        &globalHistogram[i + THIRD_RADIX_START],
+        &global_histogram[i + THIRD_RADIX_START],
         (LANE ? s_globalHistThird[i] : 0) +
             (WARP_INDEX
                  ? __shfl_sync(0xffffffff, s_globalHistThird[i - LANE_COUNT], 0)
                  : 0));
     atomicAdd(
-        &globalHistogram[i + FOURTH_RADIX_START],
+        &global_histogram[i + FOURTH_RADIX_START],
         (LANE ? s_globalHistFourth[i] : 0) +
             (WARP_INDEX ? __shfl_sync(
                               0xffffffff, s_globalHistFourth[i - LANE_COUNT], 0)
@@ -184,19 +185,19 @@ __global__ void k_GlobalHistogram(unsigned int* sort,
 
     for (i += G_HIST_THREADS; i < RADIX; i += G_HIST_THREADS) {
       atomicAdd(
-          &globalHistogram[i],
+          &global_histogram[i],
           (LANE ? s_globalHistFirst[i] : 0) +
               __shfl_sync(0xffffffff, s_globalHistFirst[i - LANE_COUNT], 0));
       atomicAdd(
-          &globalHistogram[i + SEC_RADIX_START],
+          &global_histogram[i + SEC_RADIX_START],
           (LANE ? s_globalHistSec[i] : 0) +
               __shfl_sync(0xffffffff, s_globalHistSec[i - LANE_COUNT], 0));
       atomicAdd(
-          &globalHistogram[i + THIRD_RADIX_START],
+          &global_histogram[i + THIRD_RADIX_START],
           (LANE ? s_globalHistThird[i] : 0) +
               __shfl_sync(0xffffffff, s_globalHistThird[i - LANE_COUNT], 0));
       atomicAdd(
-          &globalHistogram[i + FOURTH_RADIX_START],
+          &global_histogram[i + FOURTH_RADIX_START],
           (LANE ? s_globalHistFourth[i] : 0) +
               __shfl_sync(0xffffffff, s_globalHistFourth[i - LANE_COUNT], 0));
     }

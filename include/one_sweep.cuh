@@ -1,7 +1,7 @@
 #pragma once
 
-__global__ void k_GlobalHistogram(unsigned int* sort,
-                                  unsigned int* globalHistogram,
+__global__ void k_GlobalHistogram(const unsigned int* sort,
+                                  unsigned int* global_histogram,
                                   int size);
 
 __global__ void k_DigitBinning(unsigned int* globalHistogram,
