@@ -14,7 +14,8 @@ constexpr auto kRadix = 256;  // fixed for 32-bit unsigned int
 constexpr auto kRadixPasses = 4;
 
 [[nodiscard]] constexpr int GlobalHistThreadBlocks(const int size) {
-  return 2048;
+  return 1;  // was 2048
+  // return 2048;
 }
 
 [[nodiscard]] constexpr int BinningThreadBlocks(const int size) {
