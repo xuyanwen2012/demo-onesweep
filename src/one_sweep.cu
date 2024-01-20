@@ -43,17 +43,19 @@ using namespace cooperative_groups;
 
 // these two macros need to be replaced with
 
-#define G_HIST_PART_START \
-  (blockIdx.x * G_HIST_PART_SIZE)  // Starting offset of a partition tile
-#define G_HIST_PART_END \
-  (blockIdx.x == gridDim.x - 1 ? size : (blockIdx.x + 1) * G_HIST_PART_SIZE)
+// #define G_HIST_PART_START \
+//   (blockIdx.x * G_HIST_PART_SIZE)  // Starting offset of a partition tile
+// #define G_HIST_PART_END \
+//   (blockIdx.x == gridDim.x - 1 ? size : (blockIdx.x + 1) * G_HIST_PART_SIZE)
 
 // For the digit binning
 #define BIN_PART_SIZE 7680  // Partition tile size in k_DigitBinning
+
 #define BIN_HISTS_SIZE \
   4096  // Total size of warp histograms in shared memory in k_DigitBinning
 #define BIN_SUB_PART_SIZE \
   480  // Subpartition tile size of a single warp in k_DigitBinning
+
 #define BIN_THREADS 512         // Threads per threadblock in k_DigitBinning
 #define BIN_WARPS 16            // Warps per threadblock in k_DigitBinning
 #define BIN_KEYS_PER_THREAD 15  // Keys per thread in k_DigitBinning
