@@ -60,7 +60,7 @@ struct RadixSortData {
     }
   }
 
-  [[nodiscard]] bool IsSorted(const int n) const {
+  [[nodiscard]] bool IsSorted() const {
     return std::is_sorted(u_sort, u_sort + n);
   }
 
@@ -128,7 +128,7 @@ int main(const int argc, const char* argv[]) {
   constexpr auto seed = 114514;
   data_ptr->InitRandom(seed);
 
-  auto result = data_ptr->IsSorted(n);
+  auto result = data_ptr->IsSorted();
   std::cout << "Before sorting: Is sorted ? " << std::boolalpha << result
             << '\n';
 
@@ -142,7 +142,7 @@ int main(const int argc, const char* argv[]) {
 
   checkCudaErrors(cudaDeviceSynchronize());
 
-  result = data_ptr->IsSorted(n);
+  result = data_ptr->IsSorted();
   std::cout << "After sorting: Is sorted ? " << std::boolalpha << result
             << '\n';
 
