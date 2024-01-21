@@ -49,11 +49,13 @@ struct RadixSortData {
     checkCudaErrors(
         cudaMallocManaged(&u_index, kRadixPasses * sizeof(unsigned int)));
     checkCudaErrors(cudaMallocManaged(
-        &u_global_histogram, kRadix * kRadixPasses * sizeof(unsigned int)));
+        &u_global_histogram,
+        static_cast<size_t>(kRadix) * kRadixPasses * sizeof(unsigned int)));
     for (auto& pass_histogram : u_pass_histogram) {
-      checkCudaErrors(cudaMallocManaged(
-          &pass_histogram,
-          kRadix * BinningThreadBlocks(n) * sizeof(unsigned int)));
+      checkCudaErrors(cudaMallocManaged(&pass_histogram,
+                                        static_cast<size_t>(kRadix) *
+                                            BinningThreadBlocks(n) *
+                                            sizeof(unsigned int)));
     }
 
     cudaEventCreate(&start);
@@ -112,7 +114,7 @@ struct RadixSortData {
   }
 
   // pass function pointers
-  void DispatchWithTimming(int blocks) {
+  void DispatchWithTiming(int blocks) const {
     cudaEventRecord(start);
 
     // do something here
@@ -154,7 +156,7 @@ struct RadixSortData {
     // print result in ms
     float ms = 0;
     cudaEventElapsedTime(&ms, start, stop);
-    std::cout << "Time: " << ms << " ms" << std::endl;
+    std::cout << "Time: " << ms << " ms\n";
   }
 
   int n;
@@ -207,7 +209,7 @@ int main(const int argc, const char* argv[]) {
   // data_ptr->DispatchDigitBinning(2);
   // data_ptr->DispatchDigitBinning(3);
 
-  data_ptr->DispatchWithTimming(blocks);
+  data_ptr->DispatchWithTiming(blocks);
 
   checkCudaErrors(cudaDeviceSynchronize());
 
