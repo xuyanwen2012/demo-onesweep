@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <execution>
 #include <iostream>
 #include <memory>
 #include <numeric>
@@ -27,9 +28,9 @@ constexpr auto kRadixPasses = 4;
     [[maybe_unused]] const int size) {
   // looks like we want to process 15 items per thread
   // and since 512 threads was used, we have
-  // constexpr auto partition_size = 7680;
-  // return size / partition_size;
-  return 1;
+  constexpr auto partition_size = 7680;
+  return size / partition_size;
+  // return 1;
 }
 
 constexpr auto kLaneCount = 32;       // fixed for NVIDIA GPUs
@@ -76,7 +77,7 @@ struct RadixSortData {
   }
 
   [[nodiscard]] bool IsSorted() const {
-    return std::is_sorted(u_sort, u_sort + n);
+    return std::is_sorted(std::execution::par, u_sort, u_sort + n);
   }
 
   void InitRandom(const int seed) const {
@@ -114,8 +115,13 @@ struct RadixSortData {
   }
 
   // pass function pointers
-  void DispatchWithTiming(int blocks) const {
+  void DispatchWithTiming(const int blocks) const {
     cudaEventRecord(start);
+
+    // DispatchDigitBinning(0);
+    // DispatchDigitBinning(1);
+    // DispatchDigitBinning(2);
+    // DispatchDigitBinning(3);
 
     // do something here
     k_DigitBinning<<<blocks, kDigitBinDim>>>(u_global_histogram,
@@ -172,11 +178,12 @@ struct RadixSortData {
 int main(const int argc, const char* argv[]) {
   constexpr int size_exponent = 28;
   int n = 1 << size_exponent;  // 256M elements
-  int blocks = n / 7680;
 
   if (argc > 1) {
     n = std::strtol(argv[1], nullptr, 10);
   }
+
+  int blocks = BinningThreadBlocks(n);
 
   if (argc > 2) {
     blocks = std::strtol(argv[2], nullptr, 10);
@@ -212,6 +219,8 @@ int main(const int argc, const char* argv[]) {
   data_ptr->DispatchWithTiming(blocks);
 
   checkCudaErrors(cudaDeviceSynchronize());
+
+  std::cout << "Validation...\n";
 
   result = data_ptr->IsSorted();
   std::cout << "After sorting: Is sorted ? " << std::boolalpha << result
