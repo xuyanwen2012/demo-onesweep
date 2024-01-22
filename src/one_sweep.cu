@@ -43,17 +43,19 @@ using namespace cooperative_groups;
 
 // these two macros need to be replaced with
 
-#define G_HIST_PART_START \
-  (blockIdx.x * G_HIST_PART_SIZE)  // Starting offset of a partition tile
-#define G_HIST_PART_END \
-  (blockIdx.x == gridDim.x - 1 ? size : (blockIdx.x + 1) * G_HIST_PART_SIZE)
+// #define G_HIST_PART_START \
+//   (blockIdx.x * G_HIST_PART_SIZE)  // Starting offset of a partition tile
+// #define G_HIST_PART_END \
+//   (blockIdx.x == gridDim.x - 1 ? size : (blockIdx.x + 1) * G_HIST_PART_SIZE)
 
 // For the digit binning
 #define BIN_PART_SIZE 7680  // Partition tile size in k_DigitBinning
+
 #define BIN_HISTS_SIZE \
   4096  // Total size of warp histograms in shared memory in k_DigitBinning
 #define BIN_SUB_PART_SIZE \
   480  // Subpartition tile size of a single warp in k_DigitBinning
+
 #define BIN_THREADS 512         // Threads per threadblock in k_DigitBinning
 #define BIN_WARPS 16            // Warps per threadblock in k_DigitBinning
 #define BIN_KEYS_PER_THREAD 15  // Keys per thread in k_DigitBinning
@@ -115,93 +117,107 @@ __global__ void k_GlobalHistogram(const unsigned int* sort,
   __shared__ unsigned int s_globalHistThird[RADIX];
   __shared__ unsigned int s_globalHistFourth[RADIX];
 
-  // clear
-  for (int i = THREAD_ID; i < RADIX; i += G_HIST_THREADS) {
-    s_globalHistFirst[i] = 0;
-    s_globalHistSec[i] = 0;
-    s_globalHistThird[i] = 0;
-    s_globalHistFourth[i] = 0;
-  }
-  __syncthreads();
-
-  // Histogram
-  {
-    const int partitionEnd = G_HIST_PART_END;
-    for (int i = THREAD_ID + G_HIST_PART_START; i < partitionEnd;
-         i += G_HIST_THREADS) {
-      const unsigned int key = sort[i];
-      atomicAdd(&s_globalHistFirst[key & RADIX_MASK], 1);
-      atomicAdd(&s_globalHistSec[key >> SEC_RADIX & RADIX_MASK], 1);
-      atomicAdd(&s_globalHistThird[key >> THIRD_RADIX & RADIX_MASK], 1);
-      atomicAdd(&s_globalHistFourth[key >> FOURTH_RADIX], 1);
+  for (auto my_block_id = 0; my_block_id < gridDim.x; ++my_block_id) {
+    // clear
+    for (int i = THREAD_ID; i < RADIX; i += G_HIST_THREADS) {
+      s_globalHistFirst[i] = 0;
+      s_globalHistSec[i] = 0;
+      s_globalHistThird[i] = 0;
+      s_globalHistFourth[i] = 0;
     }
-  }
-  __syncthreads();
+    __syncthreads();
 
-  // exclusive prefix sum over the counts
-  for (int i = THREAD_ID; i < RADIX; i += G_HIST_THREADS) {
-    InclusiveWarpScanCircularShift(s_globalHistFirst, i);
-    InclusiveWarpScanCircularShift(s_globalHistSec, i);
-    InclusiveWarpScanCircularShift(s_globalHistThird, i);
-    InclusiveWarpScanCircularShift(s_globalHistFourth, i);
-  }
-  __syncthreads();
+    // Histogram
+    {
+      // #define G_HIST_PART_START (blockIdx.x * G_HIST_PART_SIZE)
+      // #define G_HIST_PART_END (blockIdx.x == gridDim.x - 1 ? size :
+      // (blockIdx.x + 1) * G_HIST_PART_SIZE)
 
-  if (LANE < (RADIX >> LANE_LOG) && WARP_INDEX == 0) {
-    InclusiveWarpScan(s_globalHistFirst, (LANE << LANE_LOG), LANE_LOG);
-    InclusiveWarpScan(s_globalHistSec, (LANE << LANE_LOG), LANE_LOG);
-    InclusiveWarpScan(s_globalHistThird, (LANE << LANE_LOG), LANE_LOG);
-    InclusiveWarpScan(s_globalHistFourth, (LANE << LANE_LOG), LANE_LOG);
-  }
-  __syncthreads();
+      // const int partitionEnd = G_HIST_PART_END;
 
-  // Atomically add to device memory
-  {
-    int i = THREAD_ID;
-    atomicAdd(
-        &global_histogram[i],
-        (LANE ? s_globalHistFirst[i] : 0) +
-            (WARP_INDEX
-                 ? __shfl_sync(0xffffffff, s_globalHistFirst[i - LANE_COUNT], 0)
-                 : 0));
-    atomicAdd(
-        &global_histogram[i + SEC_RADIX_START],
-        (LANE ? s_globalHistSec[i] : 0) +
-            (WARP_INDEX
-                 ? __shfl_sync(0xffffffff, s_globalHistSec[i - LANE_COUNT], 0)
-                 : 0));
-    atomicAdd(
-        &global_histogram[i + THIRD_RADIX_START],
-        (LANE ? s_globalHistThird[i] : 0) +
-            (WARP_INDEX
-                 ? __shfl_sync(0xffffffff, s_globalHistThird[i - LANE_COUNT], 0)
-                 : 0));
-    atomicAdd(
-        &global_histogram[i + FOURTH_RADIX_START],
-        (LANE ? s_globalHistFourth[i] : 0) +
-            (WARP_INDEX ? __shfl_sync(
-                              0xffffffff, s_globalHistFourth[i - LANE_COUNT], 0)
-                        : 0));
+      const auto partitionStart = my_block_id * G_HIST_PART_SIZE;
+      const auto partitionEnd = my_block_id == gridDim.x - 1
+                                    ? size
+                                    : (my_block_id + 1) * G_HIST_PART_SIZE;
 
-    for (i += G_HIST_THREADS; i < RADIX; i += G_HIST_THREADS) {
-      atomicAdd(
-          &global_histogram[i],
-          (LANE ? s_globalHistFirst[i] : 0) +
-              __shfl_sync(0xffffffff, s_globalHistFirst[i - LANE_COUNT], 0));
+      for (int i = THREAD_ID + partitionStart; i < partitionEnd;
+           i += G_HIST_THREADS) {
+        const unsigned int key = sort[i];
+        atomicAdd(&s_globalHistFirst[key & RADIX_MASK], 1);
+        atomicAdd(&s_globalHistSec[key >> SEC_RADIX & RADIX_MASK], 1);
+        atomicAdd(&s_globalHistThird[key >> THIRD_RADIX & RADIX_MASK], 1);
+        atomicAdd(&s_globalHistFourth[key >> FOURTH_RADIX], 1);
+      }
+    }
+    __syncthreads();
+
+    // exclusive prefix sum over the counts
+    for (int i = THREAD_ID; i < RADIX; i += G_HIST_THREADS) {
+      InclusiveWarpScanCircularShift(s_globalHistFirst, i);
+      InclusiveWarpScanCircularShift(s_globalHistSec, i);
+      InclusiveWarpScanCircularShift(s_globalHistThird, i);
+      InclusiveWarpScanCircularShift(s_globalHistFourth, i);
+    }
+    __syncthreads();
+
+    if (LANE < (RADIX >> LANE_LOG) && WARP_INDEX == 0) {
+      InclusiveWarpScan(s_globalHistFirst, (LANE << LANE_LOG), LANE_LOG);
+      InclusiveWarpScan(s_globalHistSec, (LANE << LANE_LOG), LANE_LOG);
+      InclusiveWarpScan(s_globalHistThird, (LANE << LANE_LOG), LANE_LOG);
+      InclusiveWarpScan(s_globalHistFourth, (LANE << LANE_LOG), LANE_LOG);
+    }
+    __syncthreads();
+
+    // Atomically add to device memory
+    {
+      int i = THREAD_ID;
+      atomicAdd(&global_histogram[i],
+                (LANE ? s_globalHistFirst[i] : 0) +
+                    (WARP_INDEX
+                         ? __shfl_sync(
+                               0xffffffff, s_globalHistFirst[i - LANE_COUNT], 0)
+                         : 0));
       atomicAdd(
           &global_histogram[i + SEC_RADIX_START],
           (LANE ? s_globalHistSec[i] : 0) +
-              __shfl_sync(0xffffffff, s_globalHistSec[i - LANE_COUNT], 0));
-      atomicAdd(
-          &global_histogram[i + THIRD_RADIX_START],
-          (LANE ? s_globalHistThird[i] : 0) +
-              __shfl_sync(0xffffffff, s_globalHistThird[i - LANE_COUNT], 0));
+              (WARP_INDEX
+                   ? __shfl_sync(0xffffffff, s_globalHistSec[i - LANE_COUNT], 0)
+                   : 0));
+      atomicAdd(&global_histogram[i + THIRD_RADIX_START],
+                (LANE ? s_globalHistThird[i] : 0) +
+                    (WARP_INDEX
+                         ? __shfl_sync(
+                               0xffffffff, s_globalHistThird[i - LANE_COUNT], 0)
+                         : 0));
       atomicAdd(
           &global_histogram[i + FOURTH_RADIX_START],
           (LANE ? s_globalHistFourth[i] : 0) +
-              __shfl_sync(0xffffffff, s_globalHistFourth[i - LANE_COUNT], 0));
+              (WARP_INDEX
+                   ? __shfl_sync(
+                         0xffffffff, s_globalHistFourth[i - LANE_COUNT], 0)
+                   : 0));
+
+      for (i += G_HIST_THREADS; i < RADIX; i += G_HIST_THREADS) {
+        atomicAdd(
+            &global_histogram[i],
+            (LANE ? s_globalHistFirst[i] : 0) +
+                __shfl_sync(0xffffffff, s_globalHistFirst[i - LANE_COUNT], 0));
+        atomicAdd(
+            &global_histogram[i + SEC_RADIX_START],
+            (LANE ? s_globalHistSec[i] : 0) +
+                __shfl_sync(0xffffffff, s_globalHistSec[i - LANE_COUNT], 0));
+        atomicAdd(
+            &global_histogram[i + THIRD_RADIX_START],
+            (LANE ? s_globalHistThird[i] : 0) +
+                __shfl_sync(0xffffffff, s_globalHistThird[i - LANE_COUNT], 0));
+        atomicAdd(
+            &global_histogram[i + FOURTH_RADIX_START],
+            (LANE ? s_globalHistFourth[i] : 0) +
+                __shfl_sync(0xffffffff, s_globalHistFourth[i - LANE_COUNT], 0));
+      }
     }
-  }
+
+  }  // iteration
 }
 
 __global__ void k_DigitBinning(unsigned int* globalHistogram,

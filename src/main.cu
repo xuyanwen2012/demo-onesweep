@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <execution>
 #include <iostream>
 #include <memory>
 #include <numeric>
@@ -13,15 +14,23 @@
 constexpr auto kRadix = 256;  // fixed for 32-bit unsigned int
 constexpr auto kRadixPasses = 4;
 
-[[nodiscard]] constexpr int GlobalHistThreadBlocks(const int size) {
-  return 2048;
+[[nodiscard]] constexpr int GlobalHistThreadBlocks(
+    [[maybe_unused]] const int size) {
+  return 1;  // was 2048
+  // return 2048;
 }
 
-[[nodiscard]] constexpr int BinningThreadBlocks(const int size) {
+[[nodiscard]] constexpr int GlobalHistThreadBlocksWithBlocks(const int blocks) {
+  return blocks;
+}
+
+[[nodiscard]] constexpr int BinningThreadBlocks(
+    [[maybe_unused]] const int size) {
   // looks like we want to process 15 items per thread
   // and since 512 threads was used, we have
   constexpr auto partition_size = 7680;
   return size / partition_size;
+  // return 1;
 }
 
 constexpr auto kLaneCount = 32;       // fixed for NVIDIA GPUs
@@ -41,12 +50,17 @@ struct RadixSortData {
     checkCudaErrors(
         cudaMallocManaged(&u_index, kRadixPasses * sizeof(unsigned int)));
     checkCudaErrors(cudaMallocManaged(
-        &u_global_histogram, kRadix * kRadixPasses * sizeof(unsigned int)));
+        &u_global_histogram,
+        static_cast<size_t>(kRadix) * kRadixPasses * sizeof(unsigned int)));
     for (auto& pass_histogram : u_pass_histogram) {
-      checkCudaErrors(cudaMallocManaged(
-          &pass_histogram,
-          kRadix * BinningThreadBlocks(n) * sizeof(unsigned int)));
+      checkCudaErrors(cudaMallocManaged(&pass_histogram,
+                                        static_cast<size_t>(kRadix) *
+                                            BinningThreadBlocks(n) *
+                                            sizeof(unsigned int)));
     }
+
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
   }
 
   ~RadixSortData() {
@@ -57,10 +71,13 @@ struct RadixSortData {
     for (const auto& pass_histogram : u_pass_histogram) {
       checkCudaErrors(cudaFree(pass_histogram));
     }
+
+    cudaEventDestroy(start);
+    cudaEventDestroy(stop);
   }
 
-  [[nodiscard]] bool IsSorted(const int n) const {
-    return std::is_sorted(u_sort, u_sort + n);
+  [[nodiscard]] bool IsSorted() const {
+    return std::is_sorted(std::execution::par, u_sort, u_sort + n);
   }
 
   void InitRandom(const int seed) const {
@@ -97,12 +114,65 @@ struct RadixSortData {
         pass * 8);
   }
 
+  // pass function pointers
+  void DispatchWithTiming(const int blocks) const {
+    cudaEventRecord(start);
+
+    // DispatchDigitBinning(0);
+    // DispatchDigitBinning(1);
+    // DispatchDigitBinning(2);
+    // DispatchDigitBinning(3);
+
+    // do something here
+    k_DigitBinning<<<blocks, kDigitBinDim>>>(u_global_histogram,
+                                             u_sort,
+                                             u_sort_alt,
+                                             u_pass_histogram[0],
+                                             u_index,
+                                             n,
+                                             0);
+
+    k_DigitBinning<<<blocks, kDigitBinDim>>>(u_global_histogram,
+                                             u_sort_alt,
+                                             u_sort,
+                                             u_pass_histogram[1],
+                                             u_index,
+                                             n,
+                                             8);
+
+    k_DigitBinning<<<blocks, kDigitBinDim>>>(u_global_histogram,
+                                             u_sort,
+                                             u_sort_alt,
+                                             u_pass_histogram[2],
+                                             u_index,
+                                             n,
+                                             16);
+
+    k_DigitBinning<<<blocks, kDigitBinDim>>>(u_global_histogram,
+                                             u_sort_alt,
+                                             u_sort,
+                                             u_pass_histogram[3],
+                                             u_index,
+                                             n,
+                                             24);
+
+    cudaEventRecord(stop);
+    cudaEventSynchronize(stop);
+
+    // print result in ms
+    float ms = 0;
+    cudaEventElapsedTime(&ms, start, stop);
+    std::cout << "Time: " << ms << " ms\n";
+  }
+
   int n;
   unsigned int* u_sort;
   unsigned int* u_sort_alt;
   unsigned int* u_index;
   unsigned int* u_global_histogram;
   std::array<unsigned int*, kRadixPasses> u_pass_histogram;
+
+  cudaEvent_t start, stop;
 };
 
 int main(const int argc, const char* argv[]) {
@@ -113,6 +183,12 @@ int main(const int argc, const char* argv[]) {
     n = std::strtol(argv[1], nullptr, 10);
   }
 
+  int blocks = BinningThreadBlocks(n);
+
+  if (argc > 2) {
+    blocks = std::strtol(argv[2], nullptr, 10);
+  }
+
   // check n > 8096, and n is smaller than 2^28
   if (n < 8096 || n > (1 << 28)) {
     std::cerr << "n must be between 8096 and 2^28\n";
@@ -120,6 +196,7 @@ int main(const int argc, const char* argv[]) {
   }
 
   std::cout << "n = " << n << '\n';
+  std::cout << "blocks = " << blocks << '\n';
 
   const auto data_ptr = std::make_unique<RadixSortData>(n);
 
@@ -127,21 +204,25 @@ int main(const int argc, const char* argv[]) {
   constexpr auto seed = 114514;
   data_ptr->InitRandom(seed);
 
-  auto result = data_ptr->IsSorted(n);
+  auto result = data_ptr->IsSorted();
   std::cout << "Before sorting: Is sorted ? " << std::boolalpha << result
             << '\n';
 
   std::cout << "start sorting...\n";
 
   data_ptr->DispatchGlobalHistogram();
-  data_ptr->DispatchDigitBinning(0);
-  data_ptr->DispatchDigitBinning(1);
-  data_ptr->DispatchDigitBinning(2);
-  data_ptr->DispatchDigitBinning(3);
+  // data_ptr->DispatchDigitBinning(0);
+  // data_ptr->DispatchDigitBinning(1);
+  // data_ptr->DispatchDigitBinning(2);
+  // data_ptr->DispatchDigitBinning(3);
+
+  data_ptr->DispatchWithTiming(blocks);
 
   checkCudaErrors(cudaDeviceSynchronize());
 
-  result = data_ptr->IsSorted(n);
+  std::cout << "Validation...\n";
+
+  result = data_ptr->IsSorted();
   std::cout << "After sorting: Is sorted ? " << std::boolalpha << result
             << '\n';
 
