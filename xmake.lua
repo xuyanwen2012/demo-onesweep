@@ -10,3 +10,5 @@ target("demo-onesweep")
     add_headerfiles("include/*.cuh", "include/**/*.hpp")
     add_files("src/*.cu")
     add_cugencodes("native")
+
+includes("benchmark/*.lua")

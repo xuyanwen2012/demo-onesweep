@@ -1,0 +1,21 @@
+[
+{
+  "directory": "C:\\Users\\xuyan\\projects\\demo-onesweep",
+  "arguments": ["C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v12.3\\bin\\nvcc.exe", "-c", "-Xcompiler", "\"-W3\"", "-O3", "-Iinclude", "-I\"C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v12.3\\include\"", "--std", "c++17", "-m64", "-rdc=true", "-gencode", "arch=compute_75,code=sm_75", "-o", "build\\.objs\\demo-onesweep\\windows\\x64\\release\\src\\init.cu.obj", "src\\init.cu"],
+  "file": "src\\init.cu"
+},
+{
+  "directory": "C:\\Users\\xuyan\\projects\\demo-onesweep",
+  "arguments": ["C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v12.3\\bin\\nvcc.exe", "-c", "-Xcompiler", "\"-W3\"", "-O3", "-Iinclude", "-I\"C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v12.3\\include\"", "--std", "c++17", "-m64", "-rdc=true", "-gencode", "arch=compute_75,code=sm_75", "-o", "build\\.objs\\demo-onesweep\\windows\\x64\\release\\src\\main.cu.obj", "src\\main.cu"],
+  "file": "src\\main.cu"
+},
+{
+  "directory": "C:\\Users\\xuyan\\projects\\demo-onesweep",
+  "arguments": ["C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v12.3\\bin\\nvcc.exe", "-c", "-Xcompiler", "\"-W3\"", "-O3", "-Iinclude", "-I\"C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v12.3\\include\"", "--std", "c++17", "-m64", "-rdc=true", "-gencode", "arch=compute_75,code=sm_75", "-o", "build\\.objs\\demo-onesweep\\windows\\x64\\release\\src\\one_sweep.cu.obj", "src\\one_sweep.cu"],
+  "file": "src\\one_sweep.cu"
+},
+{
+  "directory": "C:\\Users\\xuyan\\projects\\demo-onesweep",
+  "arguments": ["C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.38.33130\\bin\\HostX64\\x64\\cl.exe", "/c", "/nologo", "/W3", "/O2", "/fp:fast", "/std:c++17", "/DBENCHMARK_STATIC_DEFINE", "/EHsc", "/IC:\\Users\\xuyan\\AppData\\Local\\.xmake\\packages\\b\\benchmark\\1.8.0\\4836d9246dc04b60903b8fb053af9116\\include", "/DNDEBUG", "/Fobuild\\.objs\\bench\\windows\\x64\\release\\benchmark\\bench.cpp.obj", "benchmark\\bench.cpp"],
+  "file": "benchmark\\bench.cpp"
+}]
